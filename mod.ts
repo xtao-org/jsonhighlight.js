@@ -1,6 +1,8 @@
 import {JsonLow} from 'https://raw.githubusercontent.com/xtao-org/jsonhilo/master/mod.js'
+import { PrettyJsonLow } from "./PrettyJsonLow.ts";
+import { stringToCodePoints } from "./utils.ts";
 
-export const jsonStrToHtmlSpans = (str: string) => {
+export const jsonStrToHtmlSpans = (str: string, {pretty = false} = {}) => {
   let ret = '<span class="json">'
 
   const object = (codePoint: number) => {
@@ -19,7 +21,10 @@ export const jsonStrToHtmlSpans = (str: string) => {
   const boolean = (codePoint: number) => {
     ret += `<span class="boolean">${String.fromCodePoint(codePoint)}`
   }
-  const stream = JsonLow(new Proxy({
+
+  const ctor = pretty? PrettyJsonLow: JsonLow
+
+  const stream = ctor(new Proxy({
     openKey: (codePoint: number) => {
       ret += `<span class="key">${String.fromCodePoint(codePoint)}`
     },
@@ -64,10 +69,4 @@ export const jsonStrToHtmlSpans = (str: string) => {
   return ret
 }
 
-const stringToCodePoints = (str: string) => {
-  const points = []
-  for (let i = 0; i < str.length; ++i) {
-    points.push(str.codePointAt(i))
-  }
-  return points
-}
+export {PrettyJsonLow} from './PrettyJsonLow.ts'

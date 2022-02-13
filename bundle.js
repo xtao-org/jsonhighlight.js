@@ -528,7 +528,94 @@ const parentToString = (parent)=>{
 };
 const { _t_: _t_1 , _n_: _n_1 , _b_: _b_1 , _r_: _r_1 , _f_: _f_1  } = CodePoint;
 '\n'.charCodeAt(0);
-const jsonStrToHtmlSpans = (str)=>{
+const space = ' '.codePointAt(0);
+const newline = '\n'.codePointAt(0);
+const PrettyJsonLow = (next)=>{
+    const indent = ()=>{
+        for(let i = 0; i < currentIndent; ++i){
+            next.whitespace?.(space);
+        }
+    };
+    const indentSize = 2;
+    let currentIndent = 0;
+    let prevIndent = 0;
+    let justOpened = false;
+    let buffer = [];
+    const stream = JsonLow(new Proxy({
+        openObject: (codePoint)=>{
+            prevIndent = currentIndent;
+            currentIndent += indentSize;
+            next.openObject?.(codePoint);
+            justOpened = true;
+            buffer.push(()=>next.whitespace?.(newline)
+            , indent);
+        },
+        closeObject: (codePoint)=>{
+            currentIndent = prevIndent;
+            prevIndent -= indentSize;
+            if (justOpened) {
+                justOpened = false;
+                buffer = [];
+            } else {
+                next.whitespace?.(newline);
+                indent();
+            }
+            next.closeObject?.(codePoint);
+        },
+        openArray: (codePoint)=>{
+            prevIndent = currentIndent;
+            currentIndent += indentSize;
+            next.openArray?.(codePoint);
+            justOpened = true;
+            buffer.push(()=>next.whitespace?.(newline)
+            , indent);
+        },
+        closeArray: (codePoint)=>{
+            currentIndent = prevIndent;
+            prevIndent -= indentSize;
+            if (justOpened) {
+                justOpened = false;
+                buffer = [];
+            } else {
+                next.whitespace?.(newline);
+                indent();
+            }
+            next.closeArray?.(codePoint);
+        },
+        comma: (codePoint)=>{
+            next.comma?.(codePoint);
+            next.whitespace?.(newline);
+            indent();
+        },
+        colon: (codePoint)=>{
+            next.colon?.(codePoint);
+            next.whitespace?.(space);
+        },
+        whitespace: ()=>{
+        }
+    }, {
+        get (target, prop, rec) {
+            return target[prop] ?? ((...args)=>{
+                if (justOpened) {
+                    justOpened = false;
+                    for (const f of buffer)f();
+                    buffer = [];
+                }
+                next[prop]?.(...args);
+            });
+        }
+    }));
+    return stream;
+};
+const stringToCodePoints = (str)=>{
+    const points = [];
+    for(let i = 0; i < str.length; ++i){
+        points.push(str.codePointAt(i));
+    }
+    return points;
+};
+const jsonStrToHtmlSpans = (str, { pretty =false  } = {
+})=>{
     let ret = '<span class="json">';
     const object = (codePoint)=>{
         ret += `<span class="object">${String.fromCodePoint(codePoint)}`;
@@ -545,7 +632,8 @@ const jsonStrToHtmlSpans = (str)=>{
     const __boolean = (codePoint)=>{
         ret += `<span class="boolean">${String.fromCodePoint(codePoint)}`;
     };
-    const stream = JsonLow(new Proxy({
+    const ctor = pretty ? PrettyJsonLow : JsonLow;
+    const stream = ctor(new Proxy({
         openKey: (codePoint)=>{
             ret += `<span class="key">${String.fromCodePoint(codePoint)}`;
         },
@@ -586,11 +674,5 @@ const jsonStrToHtmlSpans = (str)=>{
     stream.end();
     return ret;
 };
-const stringToCodePoints = (str)=>{
-    const points = [];
-    for(let i = 0; i < str.length; ++i){
-        points.push(str.codePointAt(i));
-    }
-    return points;
-};
+export { PrettyJsonLow as PrettyJsonLow };
 export { jsonStrToHtmlSpans as jsonStrToHtmlSpans };
