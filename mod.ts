@@ -1,7 +1,7 @@
 import {JsonLow} from 'https://raw.githubusercontent.com/xtao-org/jsonhilo/master/mod.js'
 
 export const jsonStrToHtmlSpans = (str: string) => {
-  let ret = '<pre class="json">'
+  let ret = '<span class="json">'
 
   const object = (codePoint: number) => {
     ret += `<span class="object">${String.fromCodePoint(codePoint)}`
@@ -45,7 +45,7 @@ export const jsonStrToHtmlSpans = (str: string) => {
       ret += `</span>`
     },
     end: () => {
-      ret += `</pre>`
+      ret += `</span>`
     },
   }, {
     get(target, prop: string, rec) {
