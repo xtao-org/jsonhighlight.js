@@ -529,7 +529,7 @@ const parentToString = (parent)=>{
 const { _t_: _t_1 , _n_: _n_1 , _b_: _b_1 , _r_: _r_1 , _f_: _f_1  } = CodePoint;
 '\n'.charCodeAt(0);
 const jsonStrToHtmlSpans = (str)=>{
-    let ret = '<pre class="json">';
+    let ret = '<span class="json">';
     const object = (codePoint)=>{
         ret += `<span class="object">${String.fromCodePoint(codePoint)}`;
     };
@@ -571,7 +571,7 @@ const jsonStrToHtmlSpans = (str)=>{
             ret += `</span>`;
         },
         end: ()=>{
-            ret += `</pre>`;
+            ret += `</span>`;
         }
     }, {
         get (target, prop, rec) {
