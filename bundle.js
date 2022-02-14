@@ -687,17 +687,7 @@ const jevkoToString = (jevko)=>{
 const jsonStrToHtmlSpans = (str, { pretty =false  } = {
 })=>{
     const ancestors = [];
-    let parent = [
-        "class=",
-        [
-            "json"
-        ],
-        []
-    ];
-    const ret = [
-        "span",
-        parent
-    ];
+    let parent = [];
     const object = (codePoint)=>{
         ancestors.push(parent);
         const node = [
@@ -738,7 +728,12 @@ const jsonStrToHtmlSpans = (str, { pretty =false  } = {
         ]);
     };
     const close = (codePoint)=>{
-        parent[parent.length - 1].push(String.fromCodePoint(codePoint));
+        const prev = parent[parent.length - 1];
+        if (Array.isArray(prev) && prev.length === 1 && typeof prev[0] === 'string') {
+            prev[0] += String.fromCodePoint(codePoint);
+        } else parent.push([
+            String.fromCodePoint(codePoint)
+        ]);
         if (ancestors.length === 0) throw Error('oops');
         parent = ancestors.pop();
     };
@@ -821,7 +816,12 @@ const jsonStrToHtmlSpans = (str, { pretty =false  } = {
     }, {
         get (target, prop, _rec) {
             return target[prop] ?? ((codePoint)=>{
-                parent[parent.length - 1].push(String.fromCodePoint(codePoint));
+                const prev = parent[parent.length - 1];
+                if (Array.isArray(prev) && prev.length === 1 && typeof prev[0] === 'string') {
+                    prev[0] += String.fromCodePoint(codePoint);
+                } else parent.push([
+                    String.fromCodePoint(codePoint)
+                ]);
             });
         }
     }));
@@ -829,7 +829,13 @@ const jsonStrToHtmlSpans = (str, { pretty =false  } = {
         stream.codePoint(point);
     }
     stream.end();
-    return argsToJevko(...ret);
+    return argsToJevko("span", [
+        "class=",
+        [
+            "json"
+        ],
+        ...parent
+    ]);
 };
 export { PrettyJsonLow as PrettyJsonLow };
 export { jsonStrToHtmlSpans as jsonStrToHtmlSpans };
