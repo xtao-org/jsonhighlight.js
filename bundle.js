@@ -536,6 +536,27 @@ const PrettyJsonLow = (next)=>{
             next.whitespace?.(space);
         }
     };
+    const bufferIndent = ()=>{
+        justOpened = true;
+        buffer.push(()=>next.whitespace?.(newline)
+        , indent);
+    };
+    const flushIndent = ()=>{
+        if (justOpened) {
+            justOpened = false;
+            for (const f of buffer)f();
+            buffer = [];
+        }
+    };
+    const closeIndent = ()=>{
+        if (justOpened) {
+            justOpened = false;
+            buffer = [];
+        } else {
+            next.whitespace?.(newline);
+            indent();
+        }
+    };
     const indentSize = 2;
     let currentIndent = 0;
     let prevIndent = 0;
@@ -543,43 +564,29 @@ const PrettyJsonLow = (next)=>{
     let buffer = [];
     const stream = JsonLow(new Proxy({
         openObject: (codePoint)=>{
+            flushIndent();
             prevIndent = currentIndent;
             currentIndent += indentSize;
             next.openObject?.(codePoint);
-            justOpened = true;
-            buffer.push(()=>next.whitespace?.(newline)
-            , indent);
+            bufferIndent();
         },
         closeObject: (codePoint)=>{
             currentIndent = prevIndent;
             prevIndent -= indentSize;
-            if (justOpened) {
-                justOpened = false;
-                buffer = [];
-            } else {
-                next.whitespace?.(newline);
-                indent();
-            }
+            closeIndent();
             next.closeObject?.(codePoint);
         },
         openArray: (codePoint)=>{
+            flushIndent();
             prevIndent = currentIndent;
             currentIndent += indentSize;
             next.openArray?.(codePoint);
-            justOpened = true;
-            buffer.push(()=>next.whitespace?.(newline)
-            , indent);
+            bufferIndent();
         },
         closeArray: (codePoint)=>{
             currentIndent = prevIndent;
             prevIndent -= indentSize;
-            if (justOpened) {
-                justOpened = false;
-                buffer = [];
-            } else {
-                next.whitespace?.(newline);
-                indent();
-            }
+            closeIndent();
             next.closeArray?.(codePoint);
         },
         comma: (codePoint)=>{
@@ -596,11 +603,7 @@ const PrettyJsonLow = (next)=>{
     }, {
         get (target, prop, rec) {
             return target[prop] ?? ((...args)=>{
-                if (justOpened) {
-                    justOpened = false;
-                    for (const f of buffer)f();
-                    buffer = [];
-                }
+                flushIndent();
                 next[prop]?.(...args);
             });
         }
@@ -614,36 +617,190 @@ const stringToCodePoints = (str)=>{
     }
     return points;
 };
+const escape = (str)=>{
+    let ret = '';
+    for (const c of str){
+        if (c === '[' || c === ']' || c === '`') ret += '`';
+        ret += c;
+    }
+    return ret;
+};
+const escapePrefix = (prefix)=>prefix === '' ? '' : escape(prefix) + ' '
+;
+const recur = (jevko, indent, prevIndent)=>{
+    const { subjevkos , suffix  } = jevko;
+    let ret = '';
+    if (subjevkos.length > 0) {
+        ret += '\n';
+        for (const { prefix , jevko  } of subjevkos){
+            ret += `${indent}${escapePrefix(prefix)}[${recur(jevko, indent + '  ', indent)}]\n`;
+        }
+        ret += prevIndent;
+    }
+    return ret + escape(suffix);
+};
+const argsToJevko = (...args)=>{
+    const subjevkos = [];
+    let subjevko = {
+        prefix: ''
+    };
+    for(let i = 0; i < args.length; ++i){
+        const arg = args[i];
+        if (Array.isArray(arg)) {
+            subjevko.jevko = argsToJevko(...arg);
+            subjevkos.push(subjevko);
+            subjevko = {
+                prefix: ''
+            };
+        } else if (typeof arg === 'string') {
+            subjevko.prefix += arg;
+        } else throw Error(`Argument #${i} has unrecognized type (${typeof arg})! Only strings and arrays are allowed. The argument's value is: ${arg}`);
+    }
+    return {
+        subjevkos,
+        suffix: subjevko.prefix
+    };
+};
+const escapePrefix1 = (prefix)=>prefix === '' ? '' : prefix + ' '
+;
+const recur1 = (jevko, indent, prevIndent)=>{
+    const { subjevkos , suffix  } = jevko;
+    let ret = [];
+    if (subjevkos.length > 0) {
+        ret.push('\n');
+        for (const { prefix , jevko  } of subjevkos){
+            ret.push(indent, escapePrefix1(prefix), recur1(jevko, indent + '  ', indent), '\n');
+        }
+        ret.push(prevIndent);
+    }
+    ret.push(suffix);
+    return ret;
+};
+const jevkoToString = (jevko)=>{
+    const { subjevkos , suffix  } = jevko;
+    let ret = '';
+    for (const { prefix , jevko: jevko1  } of subjevkos){
+        ret += `${escape(prefix)}[${jevkoToString(jevko1)}]`;
+    }
+    return ret + escape(suffix);
+};
 const jsonStrToHtmlSpans = (str, { pretty =false  } = {
 })=>{
-    let ret = '<span class="json">';
+    const ancestors = [];
+    let parent = [
+        "class=",
+        [
+            "json"
+        ],
+        []
+    ];
+    const ret = [
+        "span",
+        parent
+    ];
     const object = (codePoint)=>{
-        ret += `<span class="object">${String.fromCodePoint(codePoint)}`;
+        ancestors.push(parent);
+        const node = [
+            "class=",
+            [
+                "object"
+            ],
+            [
+                String.fromCodePoint(codePoint)
+            ]
+        ];
+        parent.push("span", node);
+        parent = node;
     };
     const array = (codePoint)=>{
-        ret += `<span class="array">${String.fromCodePoint(codePoint)}`;
+        ancestors.push(parent);
+        const node = [
+            "class=",
+            [
+                "array"
+            ],
+            [
+                String.fromCodePoint(codePoint)
+            ]
+        ];
+        parent.push("span", node);
+        parent = node;
     };
     const inter = (codePoint)=>{
-        ret += `<span class="inter">${String.fromCodePoint(codePoint)}</span>`;
+        parent.push("span", [
+            "class=",
+            [
+                "inter"
+            ],
+            [
+                String.fromCodePoint(codePoint)
+            ]
+        ]);
     };
     const close = (codePoint)=>{
-        ret += `${String.fromCodePoint(codePoint)}</span>`;
+        parent[parent.length - 1].push(String.fromCodePoint(codePoint));
+        if (ancestors.length === 0) throw Error('oops');
+        parent = ancestors.pop();
     };
     const __boolean = (codePoint)=>{
-        ret += `<span class="boolean">${String.fromCodePoint(codePoint)}`;
+        ancestors.push(parent);
+        const node = [
+            "class=",
+            [
+                "boolean"
+            ],
+            [
+                String.fromCodePoint(codePoint)
+            ]
+        ];
+        parent.push("span", node);
+        parent = node;
     };
     const ctor = pretty ? PrettyJsonLow : JsonLow;
     const stream = ctor(new Proxy({
         openKey: (codePoint)=>{
-            ret += `<span class="key">${String.fromCodePoint(codePoint)}`;
+            ancestors.push(parent);
+            const node = [
+                "class=",
+                [
+                    "key"
+                ],
+                [
+                    String.fromCodePoint(codePoint)
+                ]
+            ];
+            parent.push("span", node);
+            parent = node;
         },
         openObject: object,
         openArray: array,
         openNumber: (codePoint)=>{
-            ret += `<span class="number">${String.fromCodePoint(codePoint)}`;
+            ancestors.push(parent);
+            const node = [
+                "class=",
+                [
+                    "number"
+                ],
+                [
+                    String.fromCodePoint(codePoint)
+                ]
+            ];
+            parent.push("span", node);
+            parent = node;
         },
         openString: (codePoint)=>{
-            ret += `<span class="string">${String.fromCodePoint(codePoint)}`;
+            ancestors.push(parent);
+            const node = [
+                "class=",
+                [
+                    "string"
+                ],
+                [
+                    String.fromCodePoint(codePoint)
+                ]
+            ];
+            parent.push("span", node);
+            parent = node;
         },
         colon: inter,
         comma: inter,
@@ -656,15 +813,15 @@ const jsonStrToHtmlSpans = (str, { pretty =false  } = {
         closeTrue: close,
         closeFalse: close,
         closeNumber: ()=>{
-            ret += `</span>`;
+            if (ancestors.length === 0) throw Error('oops');
+            parent = ancestors.pop();
         },
         end: ()=>{
-            ret += `</span>`;
         }
     }, {
-        get (target, prop, rec) {
+        get (target, prop, _rec) {
             return target[prop] ?? ((codePoint)=>{
-                ret += String.fromCodePoint(codePoint);
+                parent[parent.length - 1].push(String.fromCodePoint(codePoint));
             });
         }
     }));
@@ -672,7 +829,7 @@ const jsonStrToHtmlSpans = (str, { pretty =false  } = {
         stream.codePoint(point);
     }
     stream.end();
-    return ret;
+    return argsToJevko(...ret);
 };
 export { PrettyJsonLow as PrettyJsonLow };
 export { jsonStrToHtmlSpans as jsonStrToHtmlSpans };

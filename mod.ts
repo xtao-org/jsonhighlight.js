@@ -1,40 +1,65 @@
 import {JsonLow} from 'https://raw.githubusercontent.com/xtao-org/jsonhilo/master/mod.js'
 import { PrettyJsonLow } from "./PrettyJsonLow.ts";
 import { stringToCodePoints } from "./utils.ts";
+import {argsToJevko} from 'https://cdn.jsdelivr.net/gh/jevko/jevkoutils.js@v0.1.6/mod.js'
+
+type Node = (string | Node)[]
 
 export const jsonStrToHtmlSpans = (str: string, {pretty = false} = {}) => {
-  let ret = '<span class="json">'
+  const ancestors: Node[] = []
+  let parent: Node = ["class=", ["json"], []]
+  const ret = ["span", parent]
 
   const object = (codePoint: number) => {
-    ret += `<span class="object">${String.fromCodePoint(codePoint)}`
+    ancestors.push(parent)
+    const node = ["class=", ["object"], [String.fromCodePoint(codePoint)]]
+    parent.push("span", node)
+    parent = node
   }
   const array = (codePoint: number) => {
-    ret += `<span class="array">${String.fromCodePoint(codePoint)}`
+    ancestors.push(parent)
+    const node = ["class=", ["array"], [String.fromCodePoint(codePoint)]]
+    parent.push("span", node)
+    parent = node
   }
   const inter = (codePoint: number) => {
-    ret += `<span class="inter">${String.fromCodePoint(codePoint)}</span>`
+    parent.push("span", ["class=", ["inter"], [String.fromCodePoint(codePoint)]])
   }
   const close = (codePoint: number) => {
-    ret += `${String.fromCodePoint(codePoint)}</span>`
+    (parent[parent.length - 1] as string[]).push(String.fromCodePoint(codePoint))
+    if (ancestors.length === 0) throw Error('oops')
+    parent = ancestors.pop()!
   }
 
   const boolean = (codePoint: number) => {
-    ret += `<span class="boolean">${String.fromCodePoint(codePoint)}`
+    ancestors.push(parent)
+    const node = ["class=", ["boolean"], [String.fromCodePoint(codePoint)]]
+    parent.push("span", node)
+    parent = node
   }
 
   const ctor = pretty? PrettyJsonLow: JsonLow
 
   const stream = ctor(new Proxy({
     openKey: (codePoint: number) => {
-      ret += `<span class="key">${String.fromCodePoint(codePoint)}`
+      ancestors.push(parent)
+      const node = ["class=", ["key"], [String.fromCodePoint(codePoint)]]
+      parent.push("span", node)
+      parent = node
     },
     openObject: object,
     openArray: array,
     openNumber: (codePoint: number) => {
-      ret += `<span class="number">${String.fromCodePoint(codePoint)}`
+      ancestors.push(parent)
+      const node = ["class=", ["number"], [String.fromCodePoint(codePoint)]]
+      parent.push("span", node)
+      parent = node
     },
     openString: (codePoint: number) => {
-      ret += `<span class="string">${String.fromCodePoint(codePoint)}`
+      ancestors.push(parent)
+      const node = ["class=", ["string"], [String.fromCodePoint(codePoint)]]
+      parent.push("span", node)
+      parent = node
     },
     colon: inter,
     comma: inter,
@@ -47,16 +72,15 @@ export const jsonStrToHtmlSpans = (str: string, {pretty = false} = {}) => {
     closeTrue: close,
     closeFalse: close,
     closeNumber: () => {
-      ret += `</span>`
+      if (ancestors.length === 0) throw Error('oops')
+      parent = ancestors.pop()!
     },
-    end: () => {
-      ret += `</span>`
-    },
+    end: () => {},
   }, {
-    get(target, prop: string, rec) {
-      // @ts-ignore
+    get(target, prop: string, _rec) {
+      // @ts-ignore x
       return target[prop] ?? ((codePoint: number) => {
-        ret += String.fromCodePoint(codePoint)
+        (parent[parent.length - 1] as string[]).push(String.fromCodePoint(codePoint))
       })
     }
   }))
@@ -66,7 +90,7 @@ export const jsonStrToHtmlSpans = (str: string, {pretty = false} = {}) => {
   }
   stream.end()
 
-  return ret
+  return argsToJevko(...ret)
 }
 
 export {PrettyJsonLow} from './PrettyJsonLow.ts'

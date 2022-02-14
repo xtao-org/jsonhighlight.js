@@ -10,6 +10,29 @@ export const PrettyJsonLow = (next: any) => {
     }
   }
 
+  const bufferIndent = () => {
+    justOpened = true
+    buffer.push(() => next.whitespace?.(newline), indent)
+  }
+
+  const flushIndent = () => {
+    if (justOpened) {
+      justOpened = false
+      for (const f of buffer) f()
+      buffer = []
+    }
+  }
+
+  const closeIndent = () => {
+    if (justOpened) {
+      justOpened = false
+      buffer = []
+    } else {
+      next.whitespace?.(newline)
+      indent()
+    }
+  }
+
   const indentSize = 2
   let currentIndent = 0
   let prevIndent = 0
@@ -17,52 +40,36 @@ export const PrettyJsonLow = (next: any) => {
   let buffer: (() => any)[] = []
   const stream = JsonLow(new Proxy({
     openObject: (codePoint: number) => {
+      flushIndent()
       prevIndent = currentIndent
       currentIndent += indentSize
 
       next.openObject?.(codePoint)
-      justOpened = true
-      buffer.push(() => next.whitespace?.(newline), indent)
-      // next.whitespace?.(newline)
-      // indent()
+
+      bufferIndent()
     },
     closeObject: (codePoint: number) => {
       currentIndent = prevIndent
       prevIndent -= indentSize
 
-      if (justOpened) {
-        justOpened = false
-        buffer = []
-      } else {
-        next.whitespace?.(newline)
-        indent()
-      }
+      closeIndent()
 
       next.closeObject?.(codePoint)
     }, 
     openArray: (codePoint: number) => {
+      flushIndent()
+
       prevIndent = currentIndent
       currentIndent += indentSize
       next.openArray?.(codePoint)
-      justOpened = true
-      buffer.push(() => next.whitespace?.(newline), indent)
-      // next.whitespace?.(newline)
-      // indent()
+      
+      bufferIndent()
     },
     closeArray: (codePoint: number) => {
       currentIndent = prevIndent
       prevIndent -= indentSize
-
-      // next.whitespace?.(newline)
-      // indent()
-
-      if (justOpened) {
-        justOpened = false
-        buffer = []
-      } else {
-        next.whitespace?.(newline)
-        indent()
-      }
+      
+      closeIndent()
 
       next.closeArray?.(codePoint)
     }, 
@@ -78,13 +85,9 @@ export const PrettyJsonLow = (next: any) => {
     whitespace: () => {},
   }, {
     get(target, prop: string, rec) {
-      // @ts-ignore
+      // @ts-ignore x
       return target[prop] ?? ((...args) => {
-        if (justOpened) {
-          justOpened = false
-          for (const f of buffer) f()
-          buffer = []
-        }
+        flushIndent()
         next[prop]?.(...args)
       })
     }
